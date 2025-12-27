@@ -41,8 +41,8 @@ def run_sync():
         os.chdir(REPO_PATH)
         os.system('git config --global user.email "giabachand@gmail.com"')
         os.system('git config --global user.name "giabach1106"')
-        target_repo = os.getenv("TARGET_REPO_SSH")
-        os.system(f'git remote set-url origin {target_repo} || git remote add origin {target_repo}')
+        target_ssh = os.getenv("TARGET_REPO_SSH")
+        os.system(f'git remote add notes-repo {target_ssh} || git remote set-url notes-repo {target_ssh}')
         os.system("git add .")
         commit_msg = f"Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         if os.system(f'git commit -m "{commit_msg}"') == 0:
