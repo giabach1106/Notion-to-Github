@@ -43,7 +43,8 @@ def run_sync():
         commit_msg = f"Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         os.system(f'git commit -m "{commit_msg}"')
         os.system("git push origin main")
-
+        os.system('git config user.email "giabachand@gmail.com"')
+        os.system('git config user.name "giabach1106"')
         save_sync_time(last_edited_time)
         print("Sync completed.")
     else:
