@@ -31,6 +31,15 @@ def run_sync():
     last_sync_time = get_last_sync()
 
     if last_edited_time > last_sync_time:
+        print(f"[*] Exporting page {PAGE_ID} to {OUTPUT_DIR}...")
+        os.system(f"rm -rf {OUTPUT_DIR}/*")
+        StringExporter(block_id=PAGE_ID, output_path=OUTPUT_DIR).export()
+        files = os.listdir(OUTPUT_DIR)
+        print(f"[i] Files generated: {files}")
+
+        if not files:
+            print("[!] No files generated. Please check Notion Page Connection.")
+            return
         print(f"[*] Update detected: {last_edited_time}")
         
         if not os.path.exists(OUTPUT_DIR):
