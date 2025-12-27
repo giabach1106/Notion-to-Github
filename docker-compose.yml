@@ -9,6 +9,8 @@ services:
       - ./notes:/app/notes
       - ~/.ssh:/root/.ssh:ro
       - ./last_sync_timestamp.txt:/app/last_sync_timestamp.txt
+    environment:
+      - PYTHONUNBUFFERED=1
     logging:
       driver: "json-file"
       options:
