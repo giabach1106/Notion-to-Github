@@ -1,16 +1,16 @@
 import os
 import time
+import zipfile 
 from datetime import datetime
 from dotenv import load_dotenv
 from notion_client import Client
-# CHANGE 1: Import MarkdownExporter thay vì StringExporter
 from notion2md.exporter.block import MarkdownExporter
 
 load_dotenv()
 
 NOTION_TOKEN = os.getenv("NOTION_TOKEN")
 PAGE_ID = os.getenv("PAGE_ID")
-REPO_PATH = os.getenv("REPO_PATH") # Đảm bảo trong .env REPO_PATH=/app
+REPO_PATH = os.getenv("REPO_PATH")
 SYNC_FILE = os.path.join(REPO_PATH, "last_sync_timestamp.txt")
 OUTPUT_DIR = os.path.join(REPO_PATH, "notes")
 
@@ -38,43 +38,40 @@ def run_sync():
 
     last_sync_time = get_last_sync()
     
-    # Debug log
-    print(f"   Last synced: {last_sync_time}")
-    print(f"   Last edited: {last_edited_time}")
-
     if last_edited_time > last_sync_time:
-        print(f"[*] Update detected!")
+        print(f"[*] Update detected! ({last_edited_time})")
 
-        # Dọn dẹp thư mục cũ
         if not os.path.exists(OUTPUT_DIR):
             os.makedirs(OUTPUT_DIR)
         os.system(f"rm -rf {OUTPUT_DIR}/*")
 
         print(f"[*] Exporting to {OUTPUT_DIR}...")
-        
-        # CHANGE 2: Sử dụng MarkdownExporter để tạo file .md
-        # download=True để tải ảnh nếu có
         MarkdownExporter(block_id=PAGE_ID, output_path=OUTPUT_DIR, download=True).export()
 
-        files = os.listdir(OUTPUT_DIR)
-        print(f"[i] Files generated: {files}")
+        files_in_dir = os.listdir(OUTPUT_DIR)
+        for file in files_in_dir:
+            if file.endswith(".zip"):
+                zip_path = os.path.join(OUTPUT_DIR, file)
+                print(f"[*] Unzipping {file}...")
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(OUTPUT_DIR)
+                os.remove(zip_path)
+        final_files = os.listdir(OUTPUT_DIR)
+        print(f"[i] Files ready to push: {final_files}")
 
-        if not files:
-            print("[!] No files generated. Check content or Permissions.")
+        if not final_files:
+            print("[!] No files generated.")
             return
 
-        # Git Operations
         os.chdir(REPO_PATH)
         os.system('git config user.email "giabachand@gmail.com"')
         os.system('git config user.name "giabach1106"')
 
         target_ssh = os.getenv("TARGET_REPO_SSH")
-        # Đảm bảo remote url chính xác
         os.system(f'git remote add notes-repo {target_ssh} 2>/dev/null || git remote set-url notes-repo {target_ssh}')
 
         os.system("git add notes/")
         
-        # Kiểm tra xem có gì thay đổi để commit không
         status = os.popen("git status --porcelain").read()
         if not status:
              print("[i] No content changes detected by Git.")
@@ -90,17 +87,17 @@ def run_sync():
             else:
                 print("[!] Push failed.")
         else:
-            print("[i] Commit failed or nothing to commit.")
+            print("[i] Commit failed.")
     else:
         print("[i] No changes.")
 
 if __name__ == "__main__":
-    print("Started Notion-to-GitHub Sync Bot...")
+    print("Started Notion-to-GitHub Sync Bot (Unzip logic added)...")
     while True:
         try:
             run_sync()
         except Exception as e:
             print(f"CRITICAL ERROR: {e}")
-
+        
         print("Sleeping for 1 minute...")
         time.sleep(60)
