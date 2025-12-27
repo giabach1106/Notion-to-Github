@@ -59,4 +59,4 @@ if __name__ == "__main__":
             print(f"Error: {e}")
         
         print("Sleeping for 10 minutes...")
-        time.sleep(600)
+        time.sleep(60)
