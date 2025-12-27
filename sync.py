@@ -39,9 +39,9 @@ def run_sync():
         StringExporter(block_id=PAGE_ID, output_path=OUTPUT_DIR).export()
 
         os.chdir(REPO_PATH)
-        os.system("git add .")
         os.system('git config --global user.email "giabachand@gmail.com"')
         os.system('git config --global user.name "giabach1106"')
+        os.system("git add .")
         commit_msg = f"Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         os.system(f'git commit -m "{commit_msg}"')
         os.system("git push origin main")
