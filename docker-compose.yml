@@ -1,0 +1,16 @@
+services:
+  notion-sync:
+    build: .
+    container_name: notion-github-sync
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./notes:/app/notes
+      - ~/.ssh:/root/.ssh:ro
+      - ./last_sync_timestamp.txt:/app/last_sync_timestamp.txt
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10mb"
+        max-file: "3"
