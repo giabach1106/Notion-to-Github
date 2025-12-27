@@ -1,6 +1,8 @@
 import os
 import time
-import zipfile 
+import zipfile
+import re
+import urllib.parse
 from datetime import datetime
 from dotenv import load_dotenv
 from notion_client import Client
@@ -10,7 +12,7 @@ load_dotenv()
 
 NOTION_TOKEN = os.getenv("NOTION_TOKEN")
 PAGE_ID = os.getenv("PAGE_ID")
-REPO_PATH = os.getenv("REPO_PATH")
+REPO_PATH = os.getenv("REPO_PATH") or "/app"
 SYNC_FILE = os.path.join(REPO_PATH, "last_sync_timestamp.txt")
 OUTPUT_DIR = os.path.join(REPO_PATH, "notes")
 
@@ -26,6 +28,52 @@ def get_last_sync():
 def save_sync_time(timestamp):
     with open(SYNC_FILE, "w") as f:
         f.write(timestamp)
+
+def post_process_files(directory):
+    print(f"[*] Starting post-processing in {directory}...")
+    
+    rename_map = {} 
+    
+    uuid_pattern = re.compile(r'( ?[a-f0-9]{32})(\.[a-zA-Z0-9]+)$')
+
+    for root, dirs, files in os.walk(directory, topdown=False):
+        for filename in files:
+            match = uuid_pattern.search(filename)
+            if match:
+                clean_name = filename.replace(match.group(1), "")
+                old_path = os.path.join(root, filename)
+                new_path = os.path.join(root, clean_name)
+                
+                if old_path != new_path:
+                    os.rename(old_path, new_path)
+                    rename_map[urllib.parse.quote(filename)] = urllib.parse.quote(clean_name)
+                    print(f"    [Renamed] {filename} -> {clean_name}")
+
+    garbage_pattern = re.compile(r"^\[//\]: # \(.*is not supported\)")
+
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file.endswith(".md"):
+                filepath = os.path.join(root, file)
+                
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read()
+
+                for old_link, new_link in rename_map.items():
+                    if old_link in content:
+                        content = content.replace(old_link, new_link)
+                
+                lines = content.splitlines()
+                cleaned_lines = []
+                for line in lines:
+                    if garbage_pattern.match(line.strip()):
+                        continue
+                    cleaned_lines.append(line)
+                
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write("\n".join(cleaned_lines))
+                    
+    print("[*] Post-processing completed.")
 
 def run_sync():
     print(f"[*] Checking page {PAGE_ID}...")
@@ -46,22 +94,19 @@ def run_sync():
         os.system(f"rm -rf {OUTPUT_DIR}/*")
 
         print(f"[*] Exporting to {OUTPUT_DIR}...")
-        MarkdownExporter(block_id=PAGE_ID, output_path=OUTPUT_DIR, download=True).export()
-
-        files_in_dir = os.listdir(OUTPUT_DIR)
-        for file in files_in_dir:
-            if file.endswith(".zip"):
-                zip_path = os.path.join(OUTPUT_DIR, file)
-                print(f"[*] Unzipping {file}...")
-                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        exported_path = MarkdownExporter(block_id=PAGE_ID, output_path=OUTPUT_DIR, download=True).export()
+        
+        exported_str = str(exported_path)
+        if exported_str.endswith(".zip"):
+            print(f"[*] Unzipping {exported_str}...")
+            try:
+                with zipfile.ZipFile(exported_str, 'r') as zip_ref:
                     zip_ref.extractall(OUTPUT_DIR)
-                os.remove(zip_path)
-        final_files = os.listdir(OUTPUT_DIR)
-        print(f"[i] Files ready to push: {final_files}")
+                os.remove(exported_str)
+            except Exception as e:
+                print(f"[!] Error unzipping: {e}")
 
-        if not final_files:
-            print("[!] No files generated.")
-            return
+        post_process_files(OUTPUT_DIR)
 
         os.chdir(REPO_PATH)
         os.system('git config user.email "giabachand@gmail.com"')
@@ -74,7 +119,7 @@ def run_sync():
         
         status = os.popen("git status --porcelain").read()
         if not status:
-             print("[i] No content changes detected by Git.")
+             print("[i] No content changes detected.")
              save_sync_time(last_edited_time)
              return
 
@@ -92,7 +137,7 @@ def run_sync():
         print("[i] No changes.")
 
 if __name__ == "__main__":
-    print("Started Notion-to-GitHub Sync Bot (Unzip logic added)...")
+    print("Started Notion-to-GitHub Sync Bot (V4: Clean Names & Links)...")
     while True:
         try:
             run_sync()
