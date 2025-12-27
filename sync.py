@@ -3,6 +3,7 @@ import time
 import zipfile
 import re
 import urllib.parse
+import glob
 from datetime import datetime
 from dotenv import load_dotenv
 from notion_client import Client
@@ -31,23 +32,34 @@ def save_sync_time(timestamp):
 
 def post_process_files(directory):
     print(f"[*] Starting post-processing in {directory}...")
-    
     rename_map = {} 
     
     uuid_pattern = re.compile(r'( ?[a-f0-9]{32})(\.[a-zA-Z0-9]+)$')
+    uuid_folder_pattern = re.compile(r'^[a-f0-9]{32}$')
 
     for root, dirs, files in os.walk(directory, topdown=False):
         for filename in files:
+            if filename.endswith(".zip") or filename.startswith("."):
+                continue
+
             match = uuid_pattern.search(filename)
             if match:
-                clean_name = filename.replace(match.group(1), "")
+                clean_name = filename.replace(match.group(1), "") 
+                if clean_name == match.group(2): 
+                    clean_name = f"Untitled{match.group(2)}"
+
                 old_path = os.path.join(root, filename)
                 new_path = os.path.join(root, clean_name)
                 
                 if old_path != new_path:
                     os.rename(old_path, new_path)
                     rename_map[urllib.parse.quote(filename)] = urllib.parse.quote(clean_name)
-                    print(f"    [Renamed] {filename} -> {clean_name}")
+                    print(f"    [Renamed File] {filename} -> {clean_name}")
+
+        for dirname in dirs:
+            match = uuid_pattern.search(dirname + ".tmp") 
+            if match or uuid_folder_pattern.match(dirname):
+                pass
 
     garbage_pattern = re.compile(r"^\[//\]: # \(.*is not supported\)")
 
@@ -75,6 +87,23 @@ def post_process_files(directory):
                     
     print("[*] Post-processing completed.")
 
+def handle_unzip(directory):
+    zip_files = glob.glob(os.path.join(directory, "*.zip"))
+    
+    if not zip_files:
+        print("[i] No zip files found (Notion might have exported raw md).")
+        return
+
+    for zip_file in zip_files:
+        print(f"[*] Unzipping {zip_file}...")
+        try:
+            with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+                zip_ref.extractall(directory)
+            os.remove(zip_file) 
+            print("[*] Unzip done & Zip removed.")
+        except Exception as e:
+            print(f"[!] Error unzipping {zip_file}: {e}")
+
 def run_sync():
     print(f"[*] Checking page {PAGE_ID}...")
     try:
@@ -94,17 +123,9 @@ def run_sync():
         os.system(f"rm -rf {OUTPUT_DIR}/*")
 
         print(f"[*] Exporting to {OUTPUT_DIR}...")
-        exported_path = MarkdownExporter(block_id=PAGE_ID, output_path=OUTPUT_DIR, download=True).export()
+        MarkdownExporter(block_id=PAGE_ID, output_path=OUTPUT_DIR, download=True).export()
         
-        exported_str = str(exported_path)
-        if exported_str.endswith(".zip"):
-            print(f"[*] Unzipping {exported_str}...")
-            try:
-                with zipfile.ZipFile(exported_str, 'r') as zip_ref:
-                    zip_ref.extractall(OUTPUT_DIR)
-                os.remove(exported_str)
-            except Exception as e:
-                print(f"[!] Error unzipping: {e}")
+        handle_unzip(OUTPUT_DIR)
 
         post_process_files(OUTPUT_DIR)
 
@@ -137,7 +158,7 @@ def run_sync():
         print("[i] No changes.")
 
 if __name__ == "__main__":
-    print("Started Notion-to-GitHub Sync Bot (V4: Clean Names & Links)...")
+    print("Started Notion-to-GitHub Sync Bot (V5: Robust Unzip)...")
     while True:
         try:
             run_sync()
