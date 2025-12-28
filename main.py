@@ -136,6 +136,10 @@ class NotionExporter:
                 response.raise_for_status()
                 data = response.json()
                 
+                # Debug: Print raw response on first attempt
+                if attempt == 0:
+                    print(f"[Debug] Raw API response: {json.dumps(data, indent=2)[:500]}...")
+                
                 results = data.get("results", [])
                 if not results:
                     print(f"[Warning] No results for task {task_id}")
@@ -143,8 +147,21 @@ class NotionExporter:
                     continue
                 
                 task = results[0]
+                
+                # Debug: Show task structure
+                if attempt < 3:
+                    print(f"[Debug] Task keys: {list(task.keys())}")
+                
                 status = task.get("status", {})
                 state = status.get("type")
+                
+                # Try alternative keys for state
+                if not state:
+                    state = task.get("state") or status.get("state")
+                
+                # Debug: Show status structure
+                if attempt < 3:
+                    print(f"[Debug] Status: {json.dumps(status, indent=2)[:300]}")
                 
                 if state == "complete":
                     export_url = status.get("exportURL")
@@ -153,11 +170,13 @@ class NotionExporter:
                         return export_url
                     else:
                         print("[Error] Export complete but no URL found")
+                        print(f"[Debug] Full status: {json.dumps(status, indent=2)}")
                         return None
                 
                 elif state == "failure":
                     error = status.get("error", "Unknown error")
                     print(f"[Error] Export failed: {error}")
+                    print(f"[Debug] Full response: {json.dumps(data, indent=2)}")
                     return None
                 
                 else:
