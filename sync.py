@@ -31,22 +31,23 @@ def save_sync_time(timestamp):
         f.write(timestamp)
 
 def post_process_files(directory):
-    print(f"[*] Starting post-processing in {directory}...")
+    print(f"[*] Processing files in {directory}...")
     rename_map = {} 
     
     uuid_pattern = re.compile(r'( ?[a-f0-9]{32})(\.[a-zA-Z0-9]+)$')
-    uuid_folder_pattern = re.compile(r'^[a-f0-9]{32}$')
+    garbage_pattern = re.compile(r"^\[//\]: # \(.*is not supported\)")
 
     for root, dirs, files in os.walk(directory, topdown=False):
         for filename in files:
             if filename.endswith(".zip") or filename.startswith("."):
+                os.remove(os.path.join(root, filename))
                 continue
 
             match = uuid_pattern.search(filename)
             if match:
                 clean_name = filename.replace(match.group(1), "") 
-                if clean_name == match.group(2): 
-                    clean_name = f"Untitled{match.group(2)}"
+                if clean_name == match.group(2):
+                    clean_name = f"Dashboard{match.group(2)}"
 
                 old_path = os.path.join(root, filename)
                 new_path = os.path.join(root, clean_name)
@@ -54,14 +55,6 @@ def post_process_files(directory):
                 if old_path != new_path:
                     os.rename(old_path, new_path)
                     rename_map[urllib.parse.quote(filename)] = urllib.parse.quote(clean_name)
-                    print(f"    [Renamed File] {filename} -> {clean_name}")
-
-        for dirname in dirs:
-            match = uuid_pattern.search(dirname + ".tmp") 
-            if match or uuid_folder_pattern.match(dirname):
-                pass
-
-    garbage_pattern = re.compile(r"^\[//\]: # \(.*is not supported\)")
 
     for root, dirs, files in os.walk(directory):
         for file in files:
@@ -70,6 +63,9 @@ def post_process_files(directory):
                 
                 with open(filepath, 'r', encoding='utf-8') as f:
                     content = f.read()
+
+                if content.startswith("---"):
+                    content = "\n" + content
 
                 for old_link, new_link in rename_map.items():
                     if old_link in content:
@@ -84,49 +80,38 @@ def post_process_files(directory):
                 
                 with open(filepath, 'w', encoding='utf-8') as f:
                     f.write("\n".join(cleaned_lines))
-                    
-    print("[*] Post-processing completed.")
 
 def handle_unzip(directory):
     zip_files = glob.glob(os.path.join(directory, "*.zip"))
     
-    if not zip_files:
-        print("[i] No zip files found (Notion might have exported raw md).")
-        return
-
     for zip_file in zip_files:
-        print(f"[*] Unzipping {zip_file}...")
         try:
             with zipfile.ZipFile(zip_file, 'r') as zip_ref:
                 zip_ref.extractall(directory)
-            os.remove(zip_file) 
-            print("[*] Unzip done & Zip removed.")
+            os.remove(zip_file)
         except Exception as e:
-            print(f"[!] Error unzipping {zip_file}: {e}")
+            print(f"[!] Error unzipping: {e}")
 
 def run_sync():
-    print(f"[*] Checking page {PAGE_ID}...")
     try:
         page = notion.pages.retrieve(PAGE_ID)
         last_edited_time = page["last_edited_time"]
     except Exception as e:
-        print(f"[!] Notion API Error: {e}")
+        print(f"[!] Error: {e}")
         return
 
     last_sync_time = get_last_sync()
     
     if last_edited_time > last_sync_time:
-        print(f"[*] Update detected! ({last_edited_time})")
+        print(f"[*] Update detected: {last_edited_time}")
 
         if not os.path.exists(OUTPUT_DIR):
             os.makedirs(OUTPUT_DIR)
         os.system(f"rm -rf {OUTPUT_DIR}/*")
 
-        print(f"[*] Exporting to {OUTPUT_DIR}...")
         MarkdownExporter(block_id=PAGE_ID, output_path=OUTPUT_DIR, download=True).export()
         
         handle_unzip(OUTPUT_DIR)
-
         post_process_files(OUTPUT_DIR)
 
         os.chdir(REPO_PATH)
@@ -140,30 +125,24 @@ def run_sync():
         
         status = os.popen("git status --porcelain").read()
         if not status:
-             print("[i] No content changes detected.")
              save_sync_time(last_edited_time)
              return
 
         commit_msg = f"Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         if os.system(f'git commit -m "{commit_msg}"') == 0:
-            print("Pushing to remote...")
             if os.system("git push notes-repo main --force") == 0:
-                print("[+] Pushed successfully.")
+                print("[+] Pushed.")
                 save_sync_time(last_edited_time)
             else:
                 print("[!] Push failed.")
-        else:
-            print("[i] Commit failed.")
     else:
         print("[i] No changes.")
 
 if __name__ == "__main__":
-    print("Started Notion-to-GitHub Sync Bot (V5: Robust Unzip)...")
+    print("Started...")
     while True:
         try:
             run_sync()
         except Exception as e:
-            print(f"CRITICAL ERROR: {e}")
-        
-        print("Sleeping for 1 minute...")
+            print(f"Error: {e}")
         time.sleep(60)
