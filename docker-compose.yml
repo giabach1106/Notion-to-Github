@@ -1,18 +1,19 @@
+version: '3.8'
+
 services:
-  notion-sync:
+  notion-backup:
     build: .
-    container_name: notion-github-sync
-    restart: always
+    container_name: notion_backup_service
+    restart: unless-stopped
     env_file:
       - .env
     volumes:
-      - ./notes:/app/notes
-      - ~/.ssh:/root/.ssh:ro
-      - ./last_sync_timestamp.txt:/app/last_sync_timestamp.txt
+      # Mount your GitHub SSH key 
+      - ~/.ssh/id_rsa:/root/.ssh/id_rsa:ro
+      # Mount the repository directory 
+      - ./notion-backup-repo:/repo
+      # Mount logs
+      - ./logs:/app/logs
     environment:
-      - PYTHONUNBUFFERED=1
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10mb"
-        max-file: "3"
+      - TZ=UTC
+      - REPO_PATH=/repo

@@ -206,3 +206,40 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 last_sync_timestamp.txt
+
+# Temporary files
+*.zip
+tmp/
+temp/
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Docker
+.dockerignore
+
+
+# Logs
+logs/
+*.log
+
+# Backup repository
+notion-backup-repo/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
